@@ -58,7 +58,7 @@ def _retry_resume(cmd: list[str], timeout_s: Optional[int]) -> str:
     raise RuntimeError("Claude failed: Session ID is already in use.")
 
 def _build_cmd(args: list[str], prompt: str, image_paths: Optional[list[str]]) -> list[str]:
-    binary = "claude.cmd" if os.name == "nt" else "claude"
+    binary = "claude"
     cmd = [binary] + args + ["--print"]
     if image_paths:
         dirs = sorted({os.path.dirname(path) or "." for path in image_paths})
