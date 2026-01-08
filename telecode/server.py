@@ -102,6 +102,12 @@ verbose_env = os.getenv("TELECODE_VERBOSE", "NOT SET")
 print(f"Debug: TELECODE_VERBOSE = {verbose_env}")
 print(f"Debug: Verbose logging = {'ENABLED' if verbose_env in {'1', 'true', 'yes', 'on', 'verbose', 'debug'} else 'DISABLED'}")
 
+# Debug: Print Codex session persistence setting
+codex_persist = os.getenv("TELECODE_CODEX_PERSIST_SESSION", "1")
+codex_persist_enabled = codex_persist not in {"0", "false", "no", "off", "disable", "disabled"}
+print(f"Debug: TELECODE_CODEX_PERSIST_SESSION = {codex_persist}")
+print(f"Debug: Codex session persistence = {'ENABLED' if codex_persist_enabled else 'DISABLED'}")
+
 # Add CORS middleware for MCP clients
 app.add_middleware(
     CORSMiddleware,
@@ -723,7 +729,7 @@ def _handle_prompt(
         chat_id,
         sessions_file,
     )
-    _send_message(telegram, chat_id, answer.strip(), reply_to_message_id=message_id)
+    _send_message(telegram, chat_id, answer.strip(), reply_to_message_id=message_id, parse_mode="Markdown")
     _maybe_send_tts(answer, chat_id, message_id, telegram)
 
 
@@ -749,13 +755,16 @@ def transcribe_with_whisper(audio_bytes: bytes) -> str:
 
 
 def _get_or_create_session(chat_id: int, sessions_file: str, engine: str) -> Optional[str]:
+    # Check if Codex session persistence is disabled (default: enabled)
+    if engine == "codex":
+        persist_codex = os.getenv("TELECODE_CODEX_PERSIST_SESSION", "1").strip()
+        if persist_codex in {"0", "false", "no", "off", "disable", "disabled"}:
+            return None
+    
     sessions = _load_sessions(sessions_file)
     session_id = sessions.get(engine)
     if session_id:
         return session_id
-
-    if engine == "codex":
-        return None
 
     session_id = str(uuid.uuid4())
     sessions[engine] = session_id
@@ -1145,12 +1154,7 @@ def _ensure_project_temp_dir() -> str:
 
 
 def _format_codex_prompt(prompt: str) -> str:
-    return (
-        "You are responding to a Telegram user.\n"
-        "Reply with one concise paragraph.\n\n"
-        f"User said:\n{prompt}\n\n"
-        "Reply concisely."
-    )
+    return prompt
 
 
 def _format_prompt_with_images(prompt: str, image_paths: list[str]) -> str:
@@ -1242,6 +1246,7 @@ def _send_message(
     text: str,
     reply_to_message_id: int | None = None,
     reply_markup: dict | None = None,
+    parse_mode: str | None = None,
 ) -> int:
     _log(f"OUT message chat_id={chat_id} text={text}")
     if reply_markup is not None:
@@ -1252,6 +1257,7 @@ def _send_message(
         text,
         reply_to_message_id=reply_to_message_id,
         reply_markup=reply_markup,
+        parse_mode=parse_mode,
     )
 
 
@@ -1264,6 +1270,7 @@ def _run_cli_command(cmd: str, timeout_s: int = 30) -> str:
             capture_output=True,
             timeout=timeout_s,
             cwd=os.getcwd(),
+            encoding="utf-8",
         )
     except subprocess.TimeoutExpired:
         return f"Command timed out after {timeout_s}s."
