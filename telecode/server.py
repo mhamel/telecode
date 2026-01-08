@@ -218,6 +218,7 @@ def _ensure_bot_commands(telegram: TelegramConfig) -> None:
         {"command": "claude", "description": "Use Claude for this chat"},
         {"command": "codex", "description": "Use Codex for this chat"},
         {"command": "cli", "description": "Run a shell command: /cli <cmd>"},
+        {"command": "new", "description": "/clear or /new - Start fresh conversation"},
         {"command": "tts_on", "description": "Enable TTS audio responses"},
         {"command": "tts_off", "description": "Disable TTS audio responses"},
     ]
@@ -312,6 +313,18 @@ def _handle_engine_command(
             telegram,
             chat_id,
             "TTS disabled.",
+            reply_to_message_id=message_id,
+        )
+        return True
+
+    if command in {"/new", "/clear"}:
+        _log(f"IN command chat_id={chat_id} command={command}")
+        engine = _get_engine_for_chat(chat_id, default_engine, sessions_file)
+        _clear_session_for_engine(engine, sessions_file)
+        _send_message(
+            telegram,
+            chat_id,
+            f"New conversation started with {engine}. Previous session cleared.",
             reply_to_message_id=message_id,
         )
         return True
@@ -825,6 +838,15 @@ def _save_sessions(sessions_file: str, sessions: dict[str, Optional[str]]) -> No
             _save_sessions_to_json(sessions_file, sessions)
         else:
             _save_sessions_to_kv(sessions_file, sessions)
+
+
+def _clear_session_for_engine(engine: str, sessions_file: str) -> None:
+    """Clear the session ID for the specified engine."""
+    sessions = _load_sessions(sessions_file)
+    sessions[engine] = None
+    _save_sessions(sessions_file, sessions)
+    _log(f"Cleared {engine} session")
+
 
 
 def _get_session_lock(session_id: str) -> threading.Lock:
